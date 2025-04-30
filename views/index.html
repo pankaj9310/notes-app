@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .note {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .note-form {
+            margin-bottom: 20px;
+        }
+        input, textarea {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .error {
+            color: red;
+            margin: 5px 0;
+        }
+        .tag {
+            display: inline-block;
+            background-color: #e9ecef;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin: 2px;
+            font-size: 0.9em;
+        }
+        .tag-input {
+            margin: 5px 0;
+        }
+        .tag-input input {
+            width: calc(100% - 100px);
+            display: inline-block;
+        }
+        .tag-input button {
+            width: 90px;
+        }
+        .tag-list {
+            margin: 5px 0;
+            min-height: 30px;
+        }
+        .filter-section {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .filter-tags {
+            margin: 10px 0;
+        }
+        .filter-tag {
+            cursor: pointer;
+            margin: 2px;
+        }
+        .filter-tag.active {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>Notes App</h1>
+    
+    <div class="note-form">
+        <h2>Create New Note</h2>
+        <input type="text" id="title" placeholder="Title" required>
+        <textarea id="content" placeholder="Content" required></textarea>
+        <div class="tag-input">
+            <input type="text" id="tagInput" placeholder="Add a tag">
+            <button onclick="addTag()">Add Tag</button>
+        </div>
+        <div id="tagList" class="tag-list"></div>
+        <button onclick="createNote()">Create Note</button>
+    </div>
+
+    <div class="filter-section">
+        <h3>Filter by Tags</h3>
+        <div id="filterTags" class="filter-tags"></div>
+    </div>
+
+    <div id="notes"></div>
+
+    <script>
+        let currentTags = [];
+        let selectedFilterTags = new Set();
+
+        // Add a tag to the current note
+        function addTag() {
+            const tagInput = document.getElementById('tagInput');
+            const tag = tagInput.value.trim();
+            
+            if (tag && !currentTags.includes(tag)) {
+                currentTags.push(tag);
+                updateTagList();
+                tagInput.value = '';
+            }
+        }
+
+        // Remove a tag from the current note
+        function removeTag(tag) {
+            currentTags = currentTags.filter(t => t !== tag);
+            updateTagList();
+        }
+
+        // Update the tag list display
+        function updateTagList() {
+            const tagList = document.getElementById('tagList');
+            tagList.innerHTML = currentTags.map(tag => `
+                <span class="tag">
+                    ${tag}
+                    <button onclick="removeTag('${tag}')" style="padding: 0 5px; margin: 0 0 0 5px;">×</button>
+                </span>
+            `).join('');
+        }
+
+        // Toggle tag filter
+        function toggleTagFilter(tag) {
+            if (selectedFilterTags.has(tag)) {
+                selectedFilterTags.delete(tag);
+            } else {
+                selectedFilterTags.add(tag);
+            }
+            updateFilterTags();
+            fetchNotes();
+        }
+
+        // Update filter tags display
+        function updateFilterTags() {
+            const filterTags = document.getElementById('filterTags');
+            const allTags = new Set();
+            document.querySelectorAll('.note-tags .tag').forEach(tag => {
+                allTags.add(tag.textContent.trim());
+            });
+
+            filterTags.innerHTML = Array.from(allTags).map(tag => `
+                <span class="tag filter-tag ${selectedFilterTags.has(tag) ? 'active' : ''}" 
+                      onclick="toggleTagFilter('${tag}')">
+                    ${tag}
+                </span>
+            `).join('');
+        }
+
+        // Fetch all notes
+        async function fetchNotes() {
+            try {
+                const response = await fetch('http://localhost:3000/api/v1/notes');
+                const notes = await response.json();
+                displayNotes(notes);
+            } catch (error) {
+                console.error('Error fetching notes:', error);
+            }
+        }
+
+        // Create a new note
+        async function createNote() {
+            const title = document.getElementById('title').value;
+            const content = document.getElementById('content').value;
+
+            if (!title || !content) {
+                alert('Please fill in both title and content');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/v1/notes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        title, 
+                        content,
+                        tags: currentTags
+                    }),
+                });
+
+                if (response.ok) {
+                    document.getElementById('title').value = '';
+                    document.getElementById('content').value = '';
+                    currentTags = [];
+                    updateTagList();
+                    fetchNotes();
+                }
+            } catch (error) {
+                console.error('Error creating note:', error);
+            }
+        }
+
+        // Update a note
+        async function updateNote(id) {
+            const title = prompt('Enter new title:');
+            const content = prompt('Enter new content:');
+            const tags = prompt('Enter tags (comma-separated):');
+
+            if (!title || !content) return;
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/v1/notes/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        title, 
+                        content,
+                        tags: tags ? tags.split(',').map(tag => tag.trim()) : []
+                    }),
+                });
+
+                if (response.ok) {
+                    fetchNotes();
+                }
+            } catch (error) {
+                console.error('Error updating note:', error);
+            }
+        }
+
+        // Delete a note
+        async function deleteNote(id) {
+            if (!confirm('Are you sure you want to delete this note?')) return;
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/v1/notes/${id}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    fetchNotes();
+                }
+            } catch (error) {
+                console.error('Error deleting note:', error);
+            }
+        }
+
+        // Display notes
+        function displayNotes(notes) {
+            const notesDiv = document.getElementById('notes');
+            notesDiv.innerHTML = '<h2>Your Notes</h2>';
+            
+            // Filter notes by selected tags
+            const filteredNotes = notes.filter(note => {
+                if (selectedFilterTags.size === 0) return true;
+                return note.tags && note.tags.some(tag => selectedFilterTags.has(tag));
+            });
+            
+            filteredNotes.forEach(note => {
+                const noteElement = document.createElement('div');
+                noteElement.className = 'note';
+                noteElement.innerHTML = `
+                    <h3>${note.title}</h3>
+                    <p>${note.content}</p>
+                    <div class="note-tags">
+                        ${note.tags ? note.tags.map(tag => `<span class="tag">${tag}</span>`).join('') : ''}
+                    </div>
+                    <p><small>Created: ${new Date(note.createdAt).toLocaleString()}</small></p>
+                    <button onclick="updateNote(${note.id})">Edit</button>
+                    <button onclick="deleteNote(${note.id})">Delete</button>
+                `;
+                notesDiv.appendChild(noteElement);
+            });
+
+            updateFilterTags();
+        }
+
+        // Load notes when page loads
+        fetchNotes();
+    </script>
+</body>
+</html> 
